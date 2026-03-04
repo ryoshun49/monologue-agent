@@ -3,12 +3,33 @@ services:
     build: .
     volumes:
       - ./data:/app/data
+      - ./config:/app/config:ro
       - claude-auth:/root/.claude
+      - ${TASKS_FILE_HOST:-./data/TASKS.md}:/app/data/TASKS.md:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-sonnet}
       - HEARTBEAT_INTERVAL_MIN=${HEARTBEAT_INTERVAL_MIN:-30}
       - MAX_BUDGET_USD=${MAX_BUDGET_USD:-0.30}
+      - NOTION_API_KEY=${NOTION_API_KEY:-}
+      - NOTION_DB_DAILY_NOTES=${NOTION_DB_DAILY_NOTES:-}
+      - NOTION_DB_WORK_CAPTURE=${NOTION_DB_WORK_CAPTURE:-}
+      - NOTION_DB_BACKLOG=${NOTION_DB_BACKLOG:-}
+    restart: unless-stopped
+
+  discord-bot:
+    build: ./discord-bot
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+      - claude-auth:/root/.claude
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-sonnet}
+      - MAX_BUDGET_USD=${MAX_BUDGET_USD:-0.30}
+    depends_on:
+      - monologue-agent
     restart: unless-stopped
 
 volumes:

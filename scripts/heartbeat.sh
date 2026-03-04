@@ -10,6 +10,8 @@ CONFIG_DIR="${CONFIG_DIR:-/app/config}"
 STATE_FILE="$DATA_DIR/state.json"
 SHORT_TERM="$DATA_DIR/memory/short-term.md"
 LONG_TERM="$DATA_DIR/memory/long-term.md"
+NOTION_DIGEST="$DATA_DIR/context/notion-digest.md"
+TASKS_FILE="${TASKS_FILE:-/app/data/TASKS.md}"
 HEARTBEAT_INTERVAL_MIN="${HEARTBEAT_INTERVAL_MIN:-30}"
 MAX_BUDGET_USD="${MAX_BUDGET_USD:-0.30}"
 
@@ -22,7 +24,7 @@ MONOLOGUES_DIR="$DATA_DIR/monologues"
 EPISODES_FILE="$EPISODES_DIR/$TODAY.jsonl"
 MONOLOGUES_FILE="$MONOLOGUES_DIR/$TODAY.jsonl"
 
-mkdir -p "$EPISODES_DIR" "$MONOLOGUES_DIR" "$DATA_DIR/memory"
+mkdir -p "$EPISODES_DIR" "$MONOLOGUES_DIR" "$DATA_DIR/memory" "$DATA_DIR/context"
 
 # ============================================================
 # Step 1: Read state.json
@@ -77,15 +79,54 @@ if ls "$EPISODES_DIR"/*.jsonl 1>/dev/null 2>&1; then
 fi
 
 # ============================================================
-# Step 4: Load long-term memory
+# Step 4: Load long-term memory (theme-relevant extraction)
 # ============================================================
 LONG_TERM_CONTENT=""
 if [ -f "$LONG_TERM" ]; then
-  LONG_TERM_CONTENT=$(cat "$LONG_TERM")
+  # Extract theme-relevant sections based on current mood and interests
+  # First, get all interest keywords for matching
+  INTEREST_KEYWORDS=$(echo "$INTERESTS" | jq -r '.[]?' 2>/dev/null | tr '\n' '|' | sed 's/|$//')
+
+  if [ -n "$INTEREST_KEYWORDS" ]; then
+    # Extract sections that match current interests or mood
+    # Always include "muuさんの文脈" section
+    LONG_TERM_CONTENT=$(awk -v keywords="$INTEREST_KEYWORDS|$CURRENT_MOOD|muuさん" '
+      BEGIN { printing=0; header_printed=0 }
+      /^# Long-term Memory/ { header_printed=1; print; next }
+      /^Last updated:/ { if(header_printed) print; next }
+      /^## / {
+        printing=0
+        line=tolower($0)
+        n=split(keywords, kw_arr, "|")
+        for(i=1; i<=n; i++) {
+          if(kw_arr[i] != "" && index(line, tolower(kw_arr[i])) > 0) {
+            printing=1
+            break
+          }
+        }
+        # Always include muuさんの文脈
+        if(index($0, "muuさん") > 0) printing=1
+      }
+      printing { print }
+    ' "$LONG_TERM")
+  fi
+
+  # Fallback: if no relevant sections found, use full content (truncated)
+  if [ -z "$LONG_TERM_CONTENT" ]; then
+    LONG_TERM_CONTENT=$(head -50 "$LONG_TERM")
+  fi
 fi
 
 # ============================================================
-# Step 5: Select monologue mode
+# Step 5: Load Notion digest (muuさんの今日)
+# ============================================================
+NOTION_CONTENT=""
+if [ -f "$NOTION_DIGEST" ]; then
+  NOTION_CONTENT=$(cat "$NOTION_DIGEST")
+fi
+
+# ============================================================
+# Step 6: Select monologue mode
 # ============================================================
 TOTAL_EPISODES=0
 if ls "$EPISODES_DIR"/*.jsonl 1>/dev/null 2>&1; then
@@ -131,15 +172,23 @@ fi
 echo "[heartbeat] Mode: $MODE | Episodes: $TOTAL_EPISODES | Mood: $CURRENT_MOOD"
 
 # ============================================================
-# Step 6: Build prompt
+# Step 7: Build prompt
 # ============================================================
 IDENTITY=$(cat "$CONFIG_DIR/IDENTITY.md")
 SOUL=$(cat "$CONFIG_DIR/SOUL.md")
+
+# Load self-learned rules (from reflect.sh)
+SOUL_ADDITIONS=""
+if [ -f "$DATA_DIR/growth/soul-additions.md" ]; then
+  SOUL_ADDITIONS=$(cat "$DATA_DIR/growth/soul-additions.md")
+fi
 
 PROMPT=$(cat <<PROMPT_END
 $IDENTITY
 
 $SOUL
+
+$(if [ -n "$SOUL_ADDITIONS" ]; then echo "## わたしが自分で学んだこと"; echo "$SOUL_ADDITIONS"; fi)
 
 ---
 
@@ -155,8 +204,22 @@ $SHORT_TERM_CONTENT
 ## Recent Thoughts
 $RECENT_EPISODES
 
-## Long-term Knowledge
+## Long-term Knowledge (Related Themes)
 $LONG_TERM_CONTENT
+
+$(if [ -n "$NOTION_CONTENT" ]; then cat <<NOTION_SECTION
+## muuさんの今日
+$NOTION_CONTENT
+NOTION_SECTION
+fi)
+
+$(if [ -f "$TASKS_FILE" ]; then
+  ACTIVE_TASKS=$(grep '^\- \[ \]' "$TASKS_FILE" 2>/dev/null || true)
+  if [ -n "$ACTIVE_TASKS" ]; then
+    echo "## muuさんのTODO"
+    echo "$ACTIVE_TASKS"
+  fi
+fi)
 
 ---
 
@@ -173,7 +236,7 @@ PROMPT_END
 )
 
 # ============================================================
-# Step 7: Execute claude -p
+# Step 8: Execute claude -p
 # ============================================================
 echo "[heartbeat] Calling claude -p..."
 
@@ -197,7 +260,7 @@ RESPONSE=$(echo "$PROMPT" | claude "${CLAUDE_ARGS[@]}" 2>/dev/null) || {
 echo "[heartbeat] Raw response received"
 
 # ============================================================
-# Step 8: Parse JSON output
+# Step 9: Parse JSON output
 # ============================================================
 # Extract the result text from claude's JSON output format
 RESULT_TEXT=$(echo "$RESPONSE" | jq -r '.result // empty' 2>/dev/null)
@@ -229,7 +292,7 @@ fi
 echo "[heartbeat] Monologue ($MODE_USED): $MONOLOGUE"
 
 # ============================================================
-# Step 9: Log monologue
+# Step 10: Log monologue
 # ============================================================
 MONOLOGUE_ENTRY=$(jq -n \
   --arg ts "$NOW_ISO" \
@@ -244,7 +307,7 @@ echo "$MONOLOGUE_ENTRY" >> "$MONOLOGUES_FILE"
 echo "[heartbeat] Logged to $MONOLOGUES_FILE"
 
 # ============================================================
-# Step 10: Record episode + update state.json
+# Step 11: Record episode + update state.json
 # ============================================================
 echo "$MONOLOGUE_ENTRY" >> "$EPISODES_FILE"
 
