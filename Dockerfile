@@ -22,4 +22,9 @@ COPY entrypoint.sh /app/entrypoint.sh
 # Make scripts executable
 RUN chmod +x /app/scripts/*.sh /app/entrypoint.sh
 
+# Lock down Claude Code permissions — no tools allowed
+RUN mkdir -p /root/.claude && \
+    echo '{"permissions":{"deny":["Bash","Edit","Write","Read","Glob","Grep","WebFetch","WebSearch","Agent","NotebookEdit"]},"tools":""}' \
+    > /root/.claude/settings.json
+
 ENTRYPOINT ["/app/entrypoint.sh"]

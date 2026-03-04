@@ -182,7 +182,8 @@ CLAUDE_ARGS=(
   --max-turns 1
   --output-format json
   --max-budget-usd "$MAX_BUDGET_USD"
-  --allowedTools ""
+  --tools ""
+  --disallowedTools "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch,Agent,NotebookEdit"
 )
 if [ -n "${CLAUDE_MODEL:-}" ]; then
   CLAUDE_ARGS+=(--model "$CLAUDE_MODEL")
