@@ -91,8 +91,8 @@ PROMPT_END
 echo "[distill] Distilling short-term memory..."
 
 NEW_SHORT=$(echo "$DISTILL_PROMPT" | claude -p \
-  --dangerously-skip-permissions \
   --max-turns 1 \
+  --allowedTools "" \
   2>/dev/null) || {
   echo "[distill] ERROR: Failed to distill short-term memory"
   exit 1
