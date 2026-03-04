@@ -1,0 +1,12 @@
+# Data (volume mounted)
+data/
+auth/
+
+# Secrets
+.env
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
