@@ -179,10 +179,10 @@ echo "[heartbeat] Calling claude -p..."
 
 CLAUDE_ARGS=(
   -p
-  --dangerously-skip-permissions
   --max-turns 1
   --output-format json
   --max-budget-usd "$MAX_BUDGET_USD"
+  --allowedTools ""
 )
 if [ -n "${CLAUDE_MODEL:-}" ]; then
   CLAUDE_ARGS+=(--model "$CLAUDE_MODEL")

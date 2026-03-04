@@ -3,9 +3,13 @@ services:
     build: .
     volumes:
       - ./data:/app/data
+      - claude-auth:/root/.claude
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-sonnet}
       - HEARTBEAT_INTERVAL_MIN=${HEARTBEAT_INTERVAL_MIN:-30}
       - MAX_BUDGET_USD=${MAX_BUDGET_USD:-0.30}
     restart: unless-stopped
+
+volumes:
+  claude-auth:
